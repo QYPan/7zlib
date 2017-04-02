@@ -1,0 +1,139 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{4008BA81-4260-484D-9FB3-1FE6DFAF7D38}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>My7zlib</RootNamespace>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v120</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v120</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <SDLCheck>true</SDLCheck>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <SDLCheck>true</SDLCheck>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="Archive\IArchive.h" />
+    <ClInclude Include="Common\Common.h" />
+    <ClInclude Include="Common\Defs.h" />
+    <ClInclude Include="Common\FileStreams.h" />
+    <ClInclude Include="Common\IntToString.h" />
+    <ClInclude Include="Common\MyBuffer.h" />
+    <ClInclude Include="Common\MyCom.h" />
+    <ClInclude Include="Common\MyInitGuid.h" />
+    <ClInclude Include="Common\MyString.h" />
+    <ClInclude Include="Common\MyTypes.h" />
+    <ClInclude Include="Common\MyUnknown.h" />
+    <ClInclude Include="Common\MyVector.h" />
+    <ClInclude Include="Common\MyWindows.h" />
+    <ClInclude Include="Common\NewHandler.h" />
+    <ClInclude Include="Common\StringConvert.h" />
+    <ClInclude Include="Common\Wildcard.h" />
+    <ClInclude Include="C\7zTypes.h" />
+    <ClInclude Include="C\7zVersion.h" />
+    <ClInclude Include="C\Compiler.h" />
+    <ClInclude Include="IDecl.h" />
+    <ClInclude Include="IPassword.h" />
+    <ClInclude Include="IProgress.h" />
+    <ClInclude Include="IStream.h" />
+    <ClInclude Include="PropID.h" />
+    <ClInclude Include="SevenZipWorker.h" />
+    <ClInclude Include="StdAfx.h" />
+    <ClInclude Include="Windows\Defs.h" />
+    <ClInclude Include="Windows\DLL.h" />
+    <ClInclude Include="Windows\FileDir.h" />
+    <ClInclude Include="Windows\FileFind.h" />
+    <ClInclude Include="Windows\FileIO.h" />
+    <ClInclude Include="Windows\FileName.h" />
+    <ClInclude Include="Windows\NtCheck.h" />
+    <ClInclude Include="Windows\PropVariant.h" />
+    <ClInclude Include="Windows\PropVariantConv.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Common\FileStreams.cpp" />
+    <ClCompile Include="Common\IntToString.cpp" />
+    <ClCompile Include="Common\MyString.cpp" />
+    <ClCompile Include="Common\MyVector.cpp" />
+    <ClCompile Include="Common\MyWindows.cpp" />
+    <ClCompile Include="Common\NewHandler.cpp" />
+    <ClCompile Include="Common\StringConvert.cpp" />
+    <ClCompile Include="Common\Wildcard.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="StdAfx.cpp" />
+    <ClCompile Include="Windows\DLL.cpp" />
+    <ClCompile Include="Windows\FileDir.cpp" />
+    <ClCompile Include="Windows\FileFind.cpp" />
+    <ClCompile Include="Windows\FileIO.cpp" />
+    <ClCompile Include="Windows\FileName.cpp" />
+    <ClCompile Include="Windows\PropVariant.cpp" />
+    <ClCompile Include="Windows\PropVariantConv.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
