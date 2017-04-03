@@ -7,6 +7,6 @@
 解压 : 7zlib.exe x "d:\folder.7z" "e:\pro\folder"
 
 ### 说明
-* main.cpp 里的 #define DEBUG_7Z 包含压缩解压调试信息， #define LIB_MAIN 包含 main 函数入口，去掉的话可以把工程编译成 .lib 库使用
+* main.cpp 里的 #define DEBUG_7Z 包含压缩解压调试信息， #define LIB_MAIN 包含 main 函数入口，去掉的话可以把工程编译成 .lib 库使用。使用编译的静态库需要 .lib，SevenZipWorker.h，7z.dll 文件
 * .exe 需要 7z.dll 支持(Debug 文件夹里包含)
 * 工程在 vs2013 下编译通过
