@@ -8,6 +8,7 @@
 #include <string.h>
 #include <string>
 #include <io.h>
+#include <time.h>
 #include <stdio.h >  
 #include <iostream>
 
@@ -33,6 +34,9 @@
 
 #include "IPassword.h"
 #include "C/7zVersion.h"
+
+//#define DEBUG_7Z // 调试信息宏
+//#define LIB_MAIN // main 函数入口宏
 
 #ifdef _WIN32
 HINSTANCE g_hInstance = 0;
@@ -385,11 +389,15 @@ STDMETHODIMP CArchiveExtractCallback::PrepareOperation(Int32 askExtractMode)
   };
   switch (askExtractMode)
   {
+#ifdef DEBUG_7Z
     case NArchive::NExtract::NAskMode::kExtract:  PrintString(kExtractingString); break;
+#endif
     case NArchive::NExtract::NAskMode::kTest:  PrintString(kTestingString); break;
     case NArchive::NExtract::NAskMode::kSkip:  PrintString(kSkippingString); break;
   };
+#ifdef DEBUG_7Z
   PrintString(_filePath);
+#endif
   return S_OK;
 }
 
@@ -455,7 +463,9 @@ STDMETHODIMP CArchiveExtractCallback::SetOperationResult(Int32 operationResult)
   _outFileStream.Release();
   if (_extractMode && _processedFileInfo.AttribDefined)
     SetFileAttrib(_diskFilePath, _processedFileInfo.Attrib);
+#ifdef DEBUG_7Z
   PrintNewLine();
+#endif
   return S_OK;
 }
 
@@ -599,12 +609,15 @@ HRESULT CArchiveUpdateCallback::Finilize()
 {
   if (m_NeedBeClosed)
   {
+#ifdef DEBUG_7Z
     PrintNewLine();
+#endif
     m_NeedBeClosed = false;
   }
   return S_OK;
 }
 
+#ifdef DEBUG_7Z
 static void GetStream2(const wchar_t *name)
 {
   PrintString("Compressing  ");
@@ -612,13 +625,16 @@ static void GetStream2(const wchar_t *name)
     name = kEmptyFileAlias;
   PrintString(name);
 }
+#endif
 
 STDMETHODIMP CArchiveUpdateCallback::GetStream(UInt32 index, ISequentialInStream **inStream)
 {
   RINOK(Finilize());
 
   const CDirItem &dirItem = (*DirItems)[index];
+#ifdef DEBUG_7Z
   GetStream2(dirItem.Name);
+#endif
  
   if (dirItem.isDir())
     return S_OK;
@@ -777,7 +793,6 @@ bool SevenZipWorker::realTraveseDir(const char *dir, const char *filespec){
 
 bool SevenZipWorker::traveseDir(const char *dir){
 	FileType type = SevenZipWorker::initDir(dir);
-	printf("folderPath: %s\n", m_folderDir);
 	if (type == ARCH){
 		m_allFilename.push_back(m_szInitDir);
 		return true;
@@ -804,6 +819,11 @@ int SevenZipWorker::getFolderNumber(){
 }
 
 bool SevenZipWorker::compress(const char *in_path, const char *out_file_name){
+#ifdef DEBUG_7Z
+	clock_t beg_time, end_time;
+	double use_time = 0.0;
+	beg_time = clock();
+#endif
 	if (!traveseDir(in_path)){
 		return false;
 	}
@@ -811,7 +831,9 @@ bool SevenZipWorker::compress(const char *in_path, const char *out_file_name){
 
 	NT_CHECK
 
+#ifdef DEBUG_7Z
 	PrintStringLn(kCopyrightString);
+#endif
 
 	NDLL::CLibrary lib;
 	if (!lib.Load(NDLL::GetModuleDirPrefix() + FTEXT(kDllName)))
@@ -892,15 +914,27 @@ bool SevenZipWorker::compress(const char *in_path, const char *out_file_name){
 
 	if (updateCallbackSpec->FailedFiles.Size() != 0)
 		return false;
+
+#ifdef DEBUG_7Z
+	end_time = clock();
+	use_time = (double)(end_time - beg_time) / CLOCKS_PER_SEC;
+
 	printf("folders: %d\n", SevenZipWorker::getFolderNumber());
 	printf("files: %d\n", SevenZipWorker::getFileNumber());
+	printf("use time: %d s\n", (int)use_time);
+#endif
 	return true;
 }
 
 bool SevenZipWorker::uncompress(const char *in_file_name, const char *out_path){
 	NT_CHECK
+#ifdef DEBUG_7Z
+	clock_t beg_time, end_time;
+	double use_time = 0.0;
+	beg_time = clock();
 
 	PrintStringLn(kCopyrightString);
+#endif
 
 	NDLL::CLibrary lib;
 	if (!lib.Load(NDLL::GetModuleDirPrefix() + FTEXT(kDllName)))
@@ -962,10 +996,15 @@ bool SevenZipWorker::uncompress(const char *in_file_name, const char *out_path){
 			return false;
 		}
 	}
+#ifdef DEBUG_7Z
+	end_time = clock();
+	use_time = (double)(end_time - beg_time) / CLOCKS_PER_SEC;
+	printf("use time: %d s\n", (int)use_time);
+#endif
 	return true;
 }
 
-#if 1
+#ifdef LIB_MAIN
 int main(int args, char *uargs[]){
 	if (args < 4){
 		PrintStringLn(kHelpString);
@@ -987,7 +1026,7 @@ int main(int args, char *uargs[]){
 
 	return 0;
 }
-#endif // end my main
+#endif // LIB_MAIN
 
 #if 0
 int MY_CDECL main(int numArgs, const char *args[])
