@@ -5,6 +5,7 @@
 
 #include <stdlib.h>  
 #include <direct.h> 
+#include <windows.h> 
 #include <string.h>
 #include <string>
 #include <io.h>
@@ -35,8 +36,8 @@
 #include "IPassword.h"
 #include "C/7zVersion.h"
 
-//#define DEBUG_7Z // 调试信息宏
-//#define LIB_MAIN // main 函数入口宏
+#define DEBUG_7Z // 调试信息宏
+#define LIB_MAIN // main 函数入口宏
 
 #ifdef _WIN32
 HINSTANCE g_hInstance = 0;
@@ -66,9 +67,23 @@ MY_COPYRIGHT " " MY_DATE "\n";
 
 static const char *kHelpString =
 "Examples:\n"
-"  7zlib.exe a filePath     fileName.7z  : compress folder into fileName.7z\n"
-"  7zlib.exe x fileName.7z  path         : extract files from archive.7z\n";
+"  7zlib.exe l d:\\work\\pro\\folder.7z                         : show all files in folder.7z\n"
+"  7zlib.exe a d:\\work\\pro\\folder     d:\\work\\pro\\folder.7z  : compress folder into folder.7z\n"
+"  7zlib.exe x d:\\work\\pro\\folder.7z  e:\\path                : extract files from folder.7z to path directory\n";
 
+void cleanLine(){
+	HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+	// 获取标准输出设备句柄
+	CONSOLE_SCREEN_BUFFER_INFO bInfo; // 窗口缓冲区信息
+	GetConsoleScreenBufferInfo(hOut, &bInfo);
+	COORD size = bInfo.dwSize;
+	int width = (int)size.X - 1;
+	putchar('\r');
+	for (int i = 0; i < width; i++){
+		putchar(' ');
+	}
+	putchar('\r');
+}
 
 static AString FStringToConsoleString(const FString &s)
 {
@@ -390,14 +405,21 @@ STDMETHODIMP CArchiveExtractCallback::PrepareOperation(Int32 askExtractMode)
   switch (askExtractMode)
   {
 #ifdef DEBUG_7Z
-    case NArchive::NExtract::NAskMode::kExtract:  PrintString(kExtractingString); break;
+	case NArchive::NExtract::NAskMode::kExtract:
+		cleanLine();
+		printf("%3.0lf%% ", SevenZipWorker::getUnZipCompletedPersent() * 100);
+		SevenZipWorker::completedFiles += 1;
+		PrintString(kExtractingString);
+		break;
 #endif
     case NArchive::NExtract::NAskMode::kTest:  PrintString(kTestingString); break;
     case NArchive::NExtract::NAskMode::kSkip:  PrintString(kSkippingString); break;
   };
+
 #ifdef DEBUG_7Z
   PrintString(_filePath);
 #endif
+
   return S_OK;
 }
 
@@ -464,7 +486,7 @@ STDMETHODIMP CArchiveExtractCallback::SetOperationResult(Int32 operationResult)
   if (_extractMode && _processedFileInfo.AttribDefined)
     SetFileAttrib(_diskFilePath, _processedFileInfo.Attrib);
 #ifdef DEBUG_7Z
-  PrintNewLine();
+  //PrintNewLine();
 #endif
   return S_OK;
 }
@@ -610,7 +632,7 @@ HRESULT CArchiveUpdateCallback::Finilize()
   if (m_NeedBeClosed)
   {
 #ifdef DEBUG_7Z
-    PrintNewLine();
+    //PrintNewLine();
 #endif
     m_NeedBeClosed = false;
   }
@@ -620,6 +642,9 @@ HRESULT CArchiveUpdateCallback::Finilize()
 #ifdef DEBUG_7Z
 static void GetStream2(const wchar_t *name)
 {
+	cleanLine();
+	printf("%3.0lf%% ", SevenZipWorker::getZipCompletedPersent() * 100);
+	SevenZipWorker::zipFileNumber += 1;
   PrintString("Compressing  ");
   if (name[0] == 0)
     name = kEmptyFileAlias;
@@ -722,8 +747,29 @@ STDMETHODIMP CArchiveUpdateCallback::CryptoGetTextPassword2(Int32 *passwordIsDef
 std::vector<std::string> SevenZipWorker::m_allFilename;
 char SevenZipWorker::m_szInitDir[];
 char SevenZipWorker::m_folderDir[];
-int SevenZipWorker::m_fileNumber = 0; // 文件总数
-int SevenZipWorker::m_folderNumber = 0; // 子文件夹总数
+unsigned int SevenZipWorker::zipFileNumber = 0; // 文件总数
+unsigned int SevenZipWorker::fileNumber = 0; // 文件总数
+unsigned int SevenZipWorker::folderNumber = 0; // 子文件夹总数
+unsigned int SevenZipWorker::unZipFiles = 0;
+unsigned int SevenZipWorker::completedFiles = 0;
+
+double SevenZipWorker::getZipCompletedPersent(){
+	if (fileNumber){
+		return zipFileNumber * 1.0 / fileNumber;
+	}
+	else{
+		return 0.0;
+	}
+}
+
+double SevenZipWorker::getUnZipCompletedPersent(){
+	if (unZipFiles){
+		return completedFiles * 1.0 / unZipFiles;
+	}
+	else{
+		return 0.0;
+	}
+}
 
 SevenZipWorker::FileType SevenZipWorker::initDir(const char *dir){
 	//先把dir转换为绝对路径  
@@ -740,7 +786,7 @@ SevenZipWorker::FileType SevenZipWorker::initDir(const char *dir){
 				int index = filePath.rfind("\\");
 				std::string folderPath = filePath.substr(0, index+1);
 				strncpy(m_folderDir, folderPath.c_str(), _MAX_PATH);
-				m_fileNumber++;
+				fileNumber++;
 				return ARCH;
 			}
 		}
@@ -753,7 +799,7 @@ SevenZipWorker::FileType SevenZipWorker::initDir(const char *dir){
 		strcat(m_szInitDir, "\\");
 	}
 	std::string filePath(m_szInitDir);
-	filePath.pop_back();
+	//filePath.pop_back();
 	int index = filePath.rfind("\\");
 	std::string folderPath = filePath.substr(0, index+1);
 	strncpy(m_folderDir, folderPath.c_str(), _MAX_PATH);
@@ -778,12 +824,12 @@ bool SevenZipWorker::realTraveseDir(const char *dir, const char *filespec){
 				if ((strcmp(fileInfo.name, ".") != 0) && (strcmp(fileInfo.name, "..") != 0)){
 					strcat(filePath, "\\");
 					realTraveseDir(filePath, filespec);
-					m_folderNumber++;
+					folderNumber++;
 				}
 			}
 			else{
 				m_allFilename.push_back(std::string(filePath));
-				m_fileNumber++;
+				fileNumber++;
 			}
 		} while (_findnext(handle, &fileInfo) == 0);
 		_findclose(handle);
@@ -808,14 +854,6 @@ void SevenZipWorker::displayFilenames(){
 	for (auto item : m_allFilename){
 		std::cout << item << std::endl;
 	}
-}
-
-int SevenZipWorker::getFileNumber(){
-	return m_fileNumber;
-}
-
-int SevenZipWorker::getFolderNumber(){
-	return m_folderNumber;
 }
 
 bool SevenZipWorker::compress(const char *in_path, const char *out_file_name){
@@ -919,8 +957,10 @@ bool SevenZipWorker::compress(const char *in_path, const char *out_file_name){
 	end_time = clock();
 	use_time = (double)(end_time - beg_time) / CLOCKS_PER_SEC;
 
-	printf("folders: %d\n", SevenZipWorker::getFolderNumber());
-	printf("files: %d\n", SevenZipWorker::getFileNumber());
+	cleanLine();
+	printf("finish!\n");
+	printf("folders: %d\n", SevenZipWorker::folderNumber);
+	printf("files: %d\n", SevenZipWorker::fileNumber);
 	printf("use time: %d s\n", (int)use_time);
 #endif
 	return true;
@@ -980,6 +1020,10 @@ bool SevenZipWorker::uncompress(const char *in_file_name, const char *out_path){
 		}
 	}
 
+	UInt32 numItems = 0;
+	archive->GetNumberOfItems(&numItems);
+	SevenZipWorker::unZipFiles = numItems;
+
 	{
 		// Extract command
 		CArchiveExtractCallback *extractCallbackSpec = new CArchiveExtractCallback;
@@ -999,14 +1043,94 @@ bool SevenZipWorker::uncompress(const char *in_file_name, const char *out_path){
 #ifdef DEBUG_7Z
 	end_time = clock();
 	use_time = (double)(end_time - beg_time) / CLOCKS_PER_SEC;
-	printf("use time: %d s\n", (int)use_time);
+	cleanLine();
+	printf("finish!\n");
+	printf("\nuse time: %d s\n", (int)use_time);
 #endif
+	return true;
+}
+
+bool SevenZipWorker::displayUnZipFiles(const char *in_file_name){
+	NT_CHECK
+#ifdef DEBUG_7Z
+	PrintStringLn(kCopyrightString);
+#endif
+
+	NDLL::CLibrary lib;
+	if (!lib.Load(NDLL::GetModuleDirPrefix() + FTEXT(kDllName)))
+	{
+		PrintError("Can not load 7-zip library");
+		return false;
+	}
+
+	Func_CreateObject createObjectFunc = (Func_CreateObject)lib.GetProc("CreateObject");
+	if (!createObjectFunc)
+	{
+		PrintError("Can not get CreateObject");
+		return false;
+	}
+
+	CMyComPtr<IInArchive> archive;
+	if (createObjectFunc(&CLSID_Format, &IID_IInArchive, (void **)&archive) != S_OK)
+	{
+		PrintError("Can not get class object");
+		return false;
+	}
+
+	CInFileStream *fileSpec = new CInFileStream;
+	CMyComPtr<IInStream> file = fileSpec;
+
+	FString archiveName = CmdStringToFString(in_file_name);
+	if (!fileSpec->Open(archiveName))
+	{
+		PrintError("Can not open archive file", archiveName);
+		return false;
+	}
+	{
+		CArchiveOpenCallback *openCallbackSpec = new CArchiveOpenCallback;
+		CMyComPtr<IArchiveOpenCallback> openCallback(openCallbackSpec);
+		openCallbackSpec->PasswordIsDefined = false;
+
+		const UInt64 scanSize = 1 << 23;
+		if (archive->Open(file, &scanSize, openCallback) != S_OK)
+		{
+			PrintError("Can not open file as archive", archiveName);
+			return false;
+		}
+	}
+	{
+		// List command
+		UInt32 numItems = 0;
+		archive->GetNumberOfItems(&numItems);
+		for (UInt32 i = 0; i < numItems; i++)
+		{
+			{
+				// Get uncompressed size of file
+				NCOM::CPropVariant prop;
+				archive->GetProperty(i, kpidSize, &prop);
+				char s[32];
+				ConvertPropVariantToShortString(prop, s);
+				PrintString(s);
+				PrintString("  ");
+			}
+		{
+			// Get name of file
+			NCOM::CPropVariant prop;
+			archive->GetProperty(i, kpidPath, &prop);
+			if (prop.vt == VT_BSTR)
+				PrintString(prop.bstrVal);
+			else if (prop.vt != VT_EMPTY)
+				PrintString("ERROR!");
+		}
+		PrintNewLine();
+		}
+	}
 	return true;
 }
 
 #ifdef LIB_MAIN
 int main(int args, char *uargs[]){
-	if (args < 4){
+	if (args < 3){
 		PrintStringLn(kHelpString);
 		return 1;
 	}
@@ -1017,7 +1141,9 @@ int main(int args, char *uargs[]){
 		return 1;
 	}
 
-	if (op == "a"){
+	if (op == "l"){
+		SevenZipWorker::displayUnZipFiles(uargs[2]);
+	}else if (op == "a"){
 		SevenZipWorker::compress(uargs[2], uargs[3]);
 	}
 	else if(op == "x"){
