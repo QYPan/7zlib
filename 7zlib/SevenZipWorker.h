@@ -6,7 +6,7 @@
 class SevenZipWorker {
 public:
 	static bool compress(const char *in_path, const char *out_file_name); // 对目录进行压缩，example: in_path d:\\work\\folder     out_file_name d:\\folder\\folder.7z
-	static bool uncompress(const char *in_file_name, const char *out_path);// 对目录进行解压缩，example: in_file_name d:\\folder\\folder.7z     out_path e:\\test
+	static bool uncompress(const char *in_file_name, const char *out_path, void (*persent)(double));// 对目录进行解压缩，example: in_file_name d:\\folder\\folder.7z     out_path e:\\test
 	static bool displayUnZipFiles(const char *in_file_name);
 	static void displayFilenames();
 	~SevenZipWorker(){}
@@ -35,6 +35,7 @@ private:
 	static char m_szInitDir[_MAX_PATH];
 	//存放文件夹所在目录的绝对路径
 	static char m_folderDir[_MAX_PATH];
+	static void(*persent_ptr)(double persent);
 };
 
 #endif _SEVEN_ZIP_WORKER_H

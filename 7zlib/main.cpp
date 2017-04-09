@@ -36,7 +36,7 @@
 #include "IPassword.h"
 #include "C/7zVersion.h"
 
-#define DEBUG_7Z // 调试信息宏
+//#define DEBUG_7Z // 调试信息宏
 #define LIB_MAIN // main 函数入口宏
 
 #ifdef _WIN32
@@ -404,10 +404,16 @@ STDMETHODIMP CArchiveExtractCallback::PrepareOperation(Int32 askExtractMode)
   };
   switch (askExtractMode)
   {
+#ifndef DEBUG_7Z
+	case NArchive::NExtract::NAskMode::kExtract:
+		SevenZipWorker::getUnZipCompletedPersent();
+		SevenZipWorker::completedFiles += 1;
+		break;
+#endif
 #ifdef DEBUG_7Z
 	case NArchive::NExtract::NAskMode::kExtract:
 		cleanLine();
-		printf("%3.0lf%% ", SevenZipWorker::getUnZipCompletedPersent() * 100);
+		printf("%3.0lf%% ", SevenZipWorker::getUnZipCompletedPersent());
 		SevenZipWorker::completedFiles += 1;
 		PrintString(kExtractingString);
 		break;
@@ -643,7 +649,7 @@ HRESULT CArchiveUpdateCallback::Finilize()
 static void GetStream2(const wchar_t *name)
 {
 	cleanLine();
-	printf("%3.0lf%% ", SevenZipWorker::getZipCompletedPersent() * 100);
+	printf("%3.0lf%% ", SevenZipWorker::getZipCompletedPersent());
 	SevenZipWorker::zipFileNumber += 1;
   PrintString("Compressing  ");
   if (name[0] == 0)
@@ -752,10 +758,11 @@ unsigned int SevenZipWorker::fileNumber = 0; // 文件总数
 unsigned int SevenZipWorker::folderNumber = 0; // 子文件夹总数
 unsigned int SevenZipWorker::unZipFiles = 0;
 unsigned int SevenZipWorker::completedFiles = 0;
+void (*SevenZipWorker::persent_ptr)(double persent) = NULL;
 
 double SevenZipWorker::getZipCompletedPersent(){
 	if (fileNumber){
-		return zipFileNumber * 1.0 / fileNumber;
+		return zipFileNumber * 100.0 / fileNumber;
 	}
 	else{
 		return 0.0;
@@ -764,7 +771,11 @@ double SevenZipWorker::getZipCompletedPersent(){
 
 double SevenZipWorker::getUnZipCompletedPersent(){
 	if (unZipFiles){
-		return completedFiles * 1.0 / unZipFiles;
+		double persent = completedFiles * 100.0 / unZipFiles;
+		if (persent_ptr != NULL){
+			persent_ptr(persent);
+		}
+		return persent;
 	}
 	else{
 		return 0.0;
@@ -966,7 +977,7 @@ bool SevenZipWorker::compress(const char *in_path, const char *out_file_name){
 	return true;
 }
 
-bool SevenZipWorker::uncompress(const char *in_file_name, const char *out_path){
+bool SevenZipWorker::uncompress(const char *in_file_name, const char *out_path, void (*persent)(double)){
 	NT_CHECK
 #ifdef DEBUG_7Z
 	clock_t beg_time, end_time;
@@ -1031,6 +1042,8 @@ bool SevenZipWorker::uncompress(const char *in_file_name, const char *out_path){
 		FString outPathName = CmdStringToFString(out_path);
 		extractCallbackSpec->Init(archive, outPathName); // second parameter is output folder path
 		extractCallbackSpec->PasswordIsDefined = false;
+
+		persent_ptr = persent;
 
 		HRESULT result = archive->Extract(NULL, (UInt32)(Int32)(-1), false, extractCallback);
 
@@ -1128,6 +1141,11 @@ bool SevenZipWorker::displayUnZipFiles(const char *in_file_name){
 	return true;
 }
 
+void testPersent(double persent){
+	cleanLine();
+	printf("%3.0lf%%", persent);
+}
+
 #ifdef LIB_MAIN
 int main(int args, char *uargs[]){
 	if (args < 3){
@@ -1147,7 +1165,12 @@ int main(int args, char *uargs[]){
 		SevenZipWorker::compress(uargs[2], uargs[3]);
 	}
 	else if(op == "x"){
-		SevenZipWorker::uncompress(uargs[2], uargs[3]);
+#ifndef DEBUG_7Z
+		SevenZipWorker::uncompress(uargs[2], uargs[3], testPersent);
+#endif
+#ifdef DEBUG_7Z
+		SevenZipWorker::uncompress(uargs[2], uargs[3], NULL);
+#endif
 	}
 
 	return 0;
