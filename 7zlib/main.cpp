@@ -38,7 +38,8 @@
 
 #include "SevenZipWorker.h"
 
-
+// 把注释去掉可编译成 exe，否则可编译成 lib，配置属性做相应修改
+//#define USE_MAIN
 
 #ifdef _WIN32
 HINSTANCE g_hInstance = 0;
@@ -67,12 +68,10 @@ static const char *kCopyrightString = "\n7-Zip " MY_VERSION
 MY_COPYRIGHT " " MY_DATE "\n";
 
 static const char *kHelpString =
-"Usage: Client7z.exe [a | l | x ] archive.7z [fileName ...]\n"
 "Examples:\n"
-"  Client7z.exe a archive.7z f1.txt f2.txt  : compress two files to archive.7z\n"
-"  Client7z.exe l archive.7z   : List contents of archive.7z\n"
-"  Client7z.exe x archive.7z   : eXtract files from archive.7z\n";
-
+"  7zlib.exe a E:\\work\\test G:\\tmp\\test.7z  : Compress folder test to test.7z\n"
+"  7zlib.exe x G:\\tmp\\test.7z E:\\work\\test  : Extract files to folder test from test.7z\n"
+"  7zlib.exe l G:\\tmp\\test.7z   : List contents of test.7z\n";
 
 static AString FStringToConsoleString(const FString &s)
 {
@@ -225,6 +224,8 @@ public:
 	// ICryptoGetTextPassword
 	STDMETHOD(CryptoGetTextPassword)(BSTR *aPassword);
 
+	typedef void(*Func_Percent)(float percent);
+
 private:
 	CMyComPtr<IInArchive> _archiveHandler;
 	FString _directoryPath;  // Output directory
@@ -243,16 +244,16 @@ private:
 	COutFileStream *_outFileStreamSpec;
 	CMyComPtr<ISequentialOutStream> _outFileStream;
 
-	UInt64 total_size;
-
 public:
 	void Init(IInArchive *archiveHandler, const FString &directoryPath);
 
 	UInt64 NumErrors;
 	bool PasswordIsDefined;
 	UString Password;
+	UInt64 TotalSize;
+	Func_Percent PercentFunc;
 
-	CArchiveExtractCallback() : PasswordIsDefined(false) {}
+	CArchiveExtractCallback() : PasswordIsDefined(false), TotalSize(0), PercentFunc(nullptr) {}
 };
 
 void CArchiveExtractCallback::Init(IInArchive *archiveHandler, const FString &directoryPath)
@@ -265,15 +266,20 @@ void CArchiveExtractCallback::Init(IInArchive *archiveHandler, const FString &di
 
 STDMETHODIMP CArchiveExtractCallback::SetTotal(UInt64 size)
 {
-	total_size = size;
-	std::cout << "total size[" << size << "]" << std::endl;
+	TotalSize = size;
+	std::cout << "Archive total size[" << size << "]" << std::endl;
 	return S_OK;
 }
 
 STDMETHODIMP CArchiveExtractCallback::SetCompleted(const UInt64 * completeValue)
 {
-	UInt64 percent = (*completeValue) * 100 / total_size;
-	std::cout << "completed["<< percent << "%]" << std::endl;
+	float percent = (*completeValue) * 100.0 / TotalSize;
+	std::cout << "Extract completed["<< percent << "%]" << std::endl;
+
+	if (PercentFunc)
+	{
+		PercentFunc(percent);
+	}
 	return S_OK;
 }
 
@@ -528,6 +534,8 @@ public:
 
 	STDMETHOD(CryptoGetTextPassword2)(Int32 *passwordIsDefined, BSTR *password);
 
+	typedef void(*Func_Percent)(float percent);
+
 public:
 	CRecordVector<UInt64> VolumesSizes;
 	UString VolName;
@@ -542,12 +550,13 @@ public:
 
 	bool m_NeedBeClosed;
 
-	UInt64 total_size;
+	UInt64 TotalSize;
+	Func_Percent PercentFunc;
 
 	FStringVector FailedFiles;
 	CRecordVector<HRESULT> FailedCodes;
 
-	CArchiveUpdateCallback() : PasswordIsDefined(false), AskPassword(false), DirItems(0) {};
+	CArchiveUpdateCallback() : PasswordIsDefined(false), AskPassword(false), DirItems(0), TotalSize(0), PercentFunc(nullptr) {};
 
 	~CArchiveUpdateCallback() { Finilize(); }
 	HRESULT Finilize();
@@ -563,15 +572,20 @@ public:
 
 STDMETHODIMP CArchiveUpdateCallback::SetTotal(UInt64 size)
 {
-	total_size = size;
-	std::cout << "total size[" << size << "]" << std::endl;
+	TotalSize = size;
+	std::cout << "Source total size[" << size << "]" << std::endl;
 	return S_OK;
 }
 
 STDMETHODIMP CArchiveUpdateCallback::SetCompleted(const UInt64 *completeValue)
 {
-	UInt64 percent = (*completeValue) * 100 / total_size;
-	std::cout << "completed[" << percent << "%]" << std::endl;
+	float percent = (*completeValue) * 100.0 / TotalSize;
+	std::cout << "Compress completed[" << percent << "%]" << std::endl;
+
+	if (PercentFunc)
+	{
+		PercentFunc(percent);
+	}
 	return S_OK;
 }
 
@@ -720,15 +734,20 @@ STDMETHODIMP CArchiveUpdateCallback::CryptoGetTextPassword2(Int32 *passwordIsDef
 
 NDLL::CLibrary lib;
 
-Func_CreateObject createObjectFunc;
+Func_CreateObject createObjectFunc = nullptr;
 
-bool Load7zDll(const std::string &dll_path)
+bool Load7zDll(const std::wstring &dll_path)
 {
 
-	FString f_dll_path = CmdStringToFString(dll_path.c_str());
+	FString real_path = NDLL::GetModuleDirPrefix() + FTEXT(kDllName);
+
+	if (dll_path != L"")
+	{
+		real_path = FString(dll_path.c_str());
+	}
 
 	//if (!lib.Load(NDLL::GetModuleDirPrefix() + FTEXT(kDllName)))
-	if (!lib.Load(f_dll_path))
+	if (!lib.Load(real_path))
 	{
 		PrintError("Can not load 7-zip library");
 		return false;
@@ -739,6 +758,10 @@ bool Load7zDll(const std::string &dll_path)
 
 bool Get7zDllFunction()
 {
+	if (createObjectFunc)
+	{
+		return true;
+	}
 	createObjectFunc = (Func_CreateObject)lib.GetProc("CreateObject");
 	if (!createObjectFunc)
 	{
@@ -748,7 +771,7 @@ bool Get7zDllFunction()
 	return true;
 }
 
-bool Initialize7zDll(const std::string &dll_path)
+bool Initialize7zDll(const std::wstring &dll_path)
 {
 	if (Load7zDll(dll_path) == false || Get7zDllFunction() == false)
 	{
@@ -758,8 +781,9 @@ bool Initialize7zDll(const std::string &dll_path)
 }
 
 SevenZipWorker::SevenZipWorker()
-	: m_folders(0),
-	m_files(0)
+	: m_folders(0)
+	, m_files(0)
+	, m_percent_func(nullptr)
 {
 
 }
@@ -769,6 +793,11 @@ void SevenZipWorker::Initialize()
 	m_folders = 0;
 	m_files = 0;
 	m_pack_list.clear();
+}
+
+void SevenZipWorker::RegisterPercentCallBackFunc(Func_Percent percent_func)
+{
+	m_percent_func = percent_func;
 }
 
 bool SevenZipWorker::TraveseFolder(const std::string &folder_path)
@@ -833,21 +862,27 @@ bool SevenZipWorker::JudgeFileExist(const std::string &file_path)
 	return true;
 }
 
-bool SevenZipWorker::Compress(const std::string &source_path, const std::string &goal_path)
+SevenZipStatus::BackStatus SevenZipWorker::Compress(const std::string &source_path, const std::string &goal_path)
 {
 
+	using namespace SevenZipStatus;
+#if 0
+	// TraveseFolder 会判，所以不需要了
 	if (JudgeFileExist(source_path) == false)
 	{
-		PrintError("get source path error");
-		return false;
+		//PrintError("get source path error");
+		return COMPRESS_BAD_SOURCE_PATH;
 	}
+#endif
 
 	Initialize();
 
-	TraveseFolder(source_path);
+	if (!TraveseFolder(source_path))
+	{
+		return COMPRESS_BAD_SOURCE_PATH;
+	}
 
 	FString archiveName = CmdStringToFString(goal_path.c_str());
-
 	
 	CObjectVector<CDirItem> dirItems;
 	{
@@ -862,8 +897,8 @@ bool SevenZipWorker::Compress(const std::string &source_path, const std::string 
 			NFind::CFileInfo fi;
 			if (!fi.Find(name))
 			{
-				PrintError("Can't find file", name);
-				return false;
+				//PrintError("Can't find file", name);
+				return COMPRESS_FIND_FILE_ERROR;
 			}
 
 			di.Attrib = fi.Attrib;
@@ -881,18 +916,21 @@ bool SevenZipWorker::Compress(const std::string &source_path, const std::string 
 	CMyComPtr<IOutStream> outFileStream = outFileStreamSpec;
 	if (!outFileStreamSpec->Create(archiveName, false))
 	{
-		PrintError("can't create archive file");
-		return false;
+		//PrintError("can't create archive file");
+		return COMPRESS_CREATE_ARCHIVE_FILE_ERROR;
 	}
 
 	CMyComPtr<IOutArchive> outArchive;
 	if (createObjectFunc(&CLSID_Format, &IID_IOutArchive, (void **)&outArchive) != S_OK)
 	{
-		PrintError("Can not get class object");
-		return false;
+		//PrintError("Can not get class object");
+		return COMPRESS_GET_CLASS_OBJECT_ERROR;
 	}
 
 	CArchiveUpdateCallback *updateCallbackSpec = new CArchiveUpdateCallback;
+
+	updateCallbackSpec->PercentFunc = m_percent_func;
+
 	CMyComPtr<IArchiveUpdateCallback2> updateCallback(updateCallbackSpec);
 	updateCallbackSpec->Init(&dirItems);
 
@@ -902,8 +940,8 @@ bool SevenZipWorker::Compress(const std::string &source_path, const std::string 
 
 	if (result != S_OK)
 	{
-		PrintError("Update Error");
-		return false;
+		//PrintError("Update Error");
+		return COMPRESS_UPDATE_ERROR;
 	}
 
 	FOR_VECTOR(i, updateCallbackSpec->FailedFiles)
@@ -913,20 +951,24 @@ bool SevenZipWorker::Compress(const std::string &source_path, const std::string 
 	}
 
 	if (updateCallbackSpec->FailedFiles.Size() != 0)
-		return false;
-	return true;
+	{
+		return COMPRESS_GET_FAILED_FILES;
+	}
+	return COMPRESS_OK;
 }
 
-bool SevenZipWorker::Extract(const std::string &source_path, const std::string &goal_path)
+SevenZipStatus::BackStatus SevenZipWorker::Extract(const std::string &source_path, const std::string &goal_path)
 {
+
+	using namespace SevenZipStatus;
 
 	CreateDirectoryA(goal_path.c_str(), NULL);
 
 	CMyComPtr<IInArchive> archive;
 	if (createObjectFunc(&CLSID_Format, &IID_IInArchive, (void **)&archive) != S_OK)
 	{
-		PrintError("Can not get class object");
-		return false;
+		//PrintError("Can not get class object");
+		return EXTRACT_GET_CLASS_OBJECT_ERROR;
 	}
 
 	CInFileStream *fileSpec = new CInFileStream;
@@ -936,8 +978,70 @@ bool SevenZipWorker::Extract(const std::string &source_path, const std::string &
 
 	if (!fileSpec->Open(archiveName))
 	{
-		PrintError("Can not open archive file", archiveName);
-		return false;
+		//PrintError("Can not open archive file", archiveName);
+		return EXTRACT_OPEN_ARCHIVE_FILE_ERROR;
+	}
+
+	{
+		CArchiveOpenCallback *openCallbackSpec = new CArchiveOpenCallback;
+
+		CMyComPtr<IArchiveOpenCallback> openCallback(openCallbackSpec);
+		openCallbackSpec->PasswordIsDefined = false;
+		// openCallbackSpec->PasswordIsDefined = true;
+		// openCallbackSpec->Password = L"1";
+
+		const UInt64 scanSize = 1 << 23;
+		if (archive->Open(file, &scanSize, openCallback) != S_OK)
+		{
+			//PrintError("Can not open file as archive", archiveName);
+			return EXTRACT_OPEN_FILE_AS_ARCHIVE_ERROR;
+		}
+	}
+
+	{
+		// Extract command
+		CArchiveExtractCallback *extractCallbackSpec = new CArchiveExtractCallback;
+
+		extractCallbackSpec->PercentFunc = m_percent_func;
+
+		CMyComPtr<IArchiveExtractCallback> extractCallback(extractCallbackSpec);
+
+		FString out_folder_path = CmdStringToFString(goal_path.c_str());
+
+		extractCallbackSpec->Init(archive, out_folder_path); // second parameter is output folder path
+		extractCallbackSpec->PasswordIsDefined = false;
+
+		HRESULT result = archive->Extract(NULL, (UInt32)(Int32)(-1), false, extractCallback);
+
+		if (result != S_OK)
+		{
+			//PrintError("Extract Error");
+			return EXTRACT_FILES_ERROR;
+		}
+	}
+	return EXTRACT_OK;
+}
+
+
+SevenZipStatus::BackStatus SevenZipWorker::ListArchive(const std::string &source_path)
+{
+	using namespace SevenZipStatus;
+	CMyComPtr<IInArchive> archive;
+	if (createObjectFunc(&CLSID_Format, &IID_IInArchive, (void **)&archive) != S_OK)
+	{
+		//PrintError("Can not get class object");
+		return LIST_GET_CLASS_OBJECT_ERROR;
+	}
+
+	CInFileStream *fileSpec = new CInFileStream;
+	CMyComPtr<IInStream> file = fileSpec;
+
+	FString archiveName = CmdStringToFString(source_path.c_str());
+
+	if (!fileSpec->Open(archiveName))
+	{
+		//PrintError("Can not open archive file", archiveName);
+		return LIST_OPEN_ARCHIVE_FILE_ERROR;
 	}
 
 	{
@@ -950,30 +1054,36 @@ bool SevenZipWorker::Extract(const std::string &source_path, const std::string &
 		const UInt64 scanSize = 1 << 23;
 		if (archive->Open(file, &scanSize, openCallback) != S_OK)
 		{
-			PrintError("Can not open file as archive", archiveName);
-			return false;
+			//PrintError("Can not open file as archive", archiveName);
+			return LIST_OPEN_FILE_AS_ARCHIVE_ERROR;
 		}
 	}
 
+	UInt32 numItems = 0;
+	archive->GetNumberOfItems(&numItems);
+	for (UInt32 i = 0; i < numItems; i++)
 	{
-		// Extract command
-		CArchiveExtractCallback *extractCallbackSpec = new CArchiveExtractCallback;
-		CMyComPtr<IArchiveExtractCallback> extractCallback(extractCallbackSpec);
-
-		FString out_folder_path = CmdStringToFString(goal_path.c_str());
-
-		extractCallbackSpec->Init(archive, out_folder_path); // second parameter is output folder path
-		extractCallbackSpec->PasswordIsDefined = false;
-
-		HRESULT result = archive->Extract(NULL, (UInt32)(Int32)(-1), false, extractCallback);
-
-		if (result != S_OK)
 		{
-			PrintError("Extract Error");
-			return false;
+			// Get uncompressed size of file
+			NCOM::CPropVariant prop;
+			archive->GetProperty(i, kpidSize, &prop);
+			char s[32];
+			ConvertPropVariantToShortString(prop, s);
+			PrintString(s);
+			PrintString("  ");
 		}
+		{
+			// Get name of file
+			NCOM::CPropVariant prop;
+			archive->GetProperty(i, kpidPath, &prop);
+			if (prop.vt == VT_BSTR)
+				PrintString(prop.bstrVal);
+			else if (prop.vt != VT_EMPTY)
+				PrintString("ERROR!");
+		}
+		PrintNewLine();
 	}
-	return true;
+	return LIST_OK;
 }
 
 
@@ -981,11 +1091,15 @@ bool SevenZipWorker::Extract(const std::string &source_path, const std::string &
 
 #define NT_CHECK_FAIL_ACTION PrintError("Unsupported Windows version"); return 1;
 
+#ifdef USE_MAIN
+
 int MY_CDECL main(int numArgs, const char *args[])
 {
 	NT_CHECK
 
-		PrintStringLn(kCopyrightString);
+	using namespace SevenZipStatus;
+
+	PrintStringLn(kCopyrightString);
 
 	if (numArgs < 3)
 	{
@@ -993,30 +1107,10 @@ int MY_CDECL main(int numArgs, const char *args[])
 		return 1;
 	}
 
-#if 1
-
-	if (Initialize7zDll("E:\\gitrepo\\7zlib\\Debug\\7z.dll") == false)
+	if (Initialize7zDll(L"G:\\repo\\7zlib\\Debug\\7z.dll") == false)
 	{
 		return 1;
 	}
-
-#endif
-
-#if 0
-	NDLL::CLibrary lib;
-	if (!lib.Load(NDLL::GetModuleDirPrefix() + FTEXT(kDllName)))
-	{
-		PrintError("Can not load 7-zip library");
-		return 1;
-	}
-
-	Func_CreateObject createObjectFunc = (Func_CreateObject)lib.GetProc("CreateObject");
-	if (!createObjectFunc)
-	{
-		PrintError("Can not get CreateObject");
-		return 1;
-	}
-#endif
 
 	char c;
 	{
@@ -1034,129 +1128,33 @@ int MY_CDECL main(int numArgs, const char *args[])
 	if (c == 'a')
 	{
 		SevenZipWorker sw;
-		sw.Compress(std::string(args[2]), std::string(args[3]));
+		SevenZipStatus::BackStatus result = sw.Compress(std::string(args[2]), std::string(args[3]));
+		std::cout << SevenZipStatus::BackMsg(result);
 	}
 	else if (c == 'x')
 	{
 		SevenZipWorker sw;
-		sw.Extract(std::string(args[2]), std::string(args[3]));
+		SevenZipStatus::BackStatus result = sw.Extract(std::string(args[2]), std::string(args[3]));
+		std::cout << SevenZipStatus::BackMsg(result);
 	}
-	else
+	else if (c == 'l')
 	{
 		if (numArgs != 3)
 		{
 			PrintStringLn(kHelpString);
 			return 1;
 		}
-
-		bool listCommand;
-
-		if (c == 'l')
-			listCommand = true;
-		else if (c == 'x')
-			listCommand = false;
-		else
-		{
-			PrintError("incorrect command");
-			return 1;
-		}
-
-		CMyComPtr<IInArchive> archive;
-		if (createObjectFunc(&CLSID_Format, &IID_IInArchive, (void **)&archive) != S_OK)
-		{
-			PrintError("Can not get class object");
-			return 1;
-		}
-
-		CInFileStream *fileSpec = new CInFileStream;
-		CMyComPtr<IInStream> file = fileSpec;
-
-		if (!fileSpec->Open(archiveName))
-		{
-			PrintError("Can not open archive file", archiveName);
-			return 1;
-		}
-
-		{
-			CArchiveOpenCallback *openCallbackSpec = new CArchiveOpenCallback;
-			CMyComPtr<IArchiveOpenCallback> openCallback(openCallbackSpec);
-			openCallbackSpec->PasswordIsDefined = false;
-			// openCallbackSpec->PasswordIsDefined = true;
-			// openCallbackSpec->Password = L"1";
-
-			const UInt64 scanSize = 1 << 23;
-			if (archive->Open(file, &scanSize, openCallback) != S_OK)
-			{
-				PrintError("Can not open file as archive", archiveName);
-				return 1;
-			}
-		}
-
-		if (listCommand)
-		{
-			// List command
-			UInt32 numItems = 0;
-			archive->GetNumberOfItems(&numItems);
-			for (UInt32 i = 0; i < numItems; i++)
-			{
-				{
-					// Get uncompressed size of file
-					NCOM::CPropVariant prop;
-					archive->GetProperty(i, kpidSize, &prop);
-					char s[32];
-					ConvertPropVariantToShortString(prop, s);
-					PrintString(s);
-					PrintString("  ");
-				}
-				{
-					// Get name of file
-					NCOM::CPropVariant prop;
-					archive->GetProperty(i, kpidPath, &prop);
-					if (prop.vt == VT_BSTR)
-						PrintString(prop.bstrVal);
-					else if (prop.vt != VT_EMPTY)
-						PrintString("ERROR!");
-				}
-				PrintNewLine();
-			}
-		}
-		else
-		{
-			// Extract command
-			CArchiveExtractCallback *extractCallbackSpec = new CArchiveExtractCallback;
-			CMyComPtr<IArchiveExtractCallback> extractCallback(extractCallbackSpec);
-			extractCallbackSpec->Init(archive, FTEXT("")); // second parameter is output folder path
-			extractCallbackSpec->PasswordIsDefined = false;
-			// extractCallbackSpec->PasswordIsDefined = true;
-			// extractCallbackSpec->Password = L"1";
-
-			/*
-			const wchar_t *names[] =
-			{
-			L"mt",
-			L"mtf"
-			};
-			const unsigned kNumProps = sizeof(names) / sizeof(names[0]);
-			NCOM::CPropVariant values[kNumProps] =
-			{
-			(UInt32)1,
-			false
-			};
-			CMyComPtr<ISetProperties> setProperties;
-			archive->QueryInterface(IID_ISetProperties, (void **)&setProperties);
-			if (setProperties)
-			setProperties->SetProperties(names, values, kNumProps);
-			*/
-
-			HRESULT result = archive->Extract(NULL, (UInt32)(Int32)(-1), false, extractCallback);
-
-			if (result != S_OK)
-			{
-				PrintError("Extract Error");
-				return 1;
-			}
-		}
+		SevenZipWorker sw;
+		SevenZipStatus::BackStatus result = sw.ListArchive(std::string(args[2]));
+		std::cout << SevenZipStatus::BackMsg(result);
+	}
+	else
+	{
+		PrintStringLn(kHelpString);
+		return 1;
 	}
 
 	return 0;
 }
+
+#endif

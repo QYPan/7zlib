@@ -1,0 +1,11 @@
+﻿# 忽略的文件信息
+
+Debug/
+Release/
+7zlib/Debug/
+7zlib/Release/
+7zlib/*.user
+
+*.opensdf
+*.sdf
+*.md~
