@@ -2,9 +2,9 @@
 一个封装了 7z 压缩解压功能的接口
 
 ### 使用
-7zlib.exe a E:\\work\\test G:\\tmp\\test.7z  : Compress folder test to test.7z
-7zlib.exe x G:\\tmp\\test.7z E:\\work\\test  : Extract files to folder test from test.7z
-7zlib.exe l G:\\tmp\\test.7z   : List contents of test.7z
+7zlib.exe a E:\\work\\test G:\\tmp\\test.7z  : Compress folder test to test.7z <br />
+7zlib.exe x G:\\tmp\\test.7z E:\\work\\test  : Extract files to folder test from test.7z <br />
+7zlib.exe l G:\\tmp\\test.7z   : List contents of test.7z <br />
 
 ### 说明
 * 本工程提取 7z 16.04 源代码中压缩解压相关部分(具体是 CPP\7zip\UI\Client7z 下的工程)，修改成可用的压缩解压接口
