@@ -754,42 +754,6 @@ NDLL::CLibrary lib;
 
 Func_CreateObject createObjectFunc = nullptr;
 
-/*
-void TraveseFiles(const wchar_t* folderPath, std::vector<std::wstring>& files)
-{
-	_wfinddata_t file_info;
-	wchar_t path[_MAX_PATH] = { 0 };
-	wcscpy_s(path, _MAX_PATH, folderPath);
-	wcscat(path, L"*");
-
-	long handle = _wfindfirst(path, &file_info);
-	if (handle != -1L)
-	{
-		do
-		{
-			wchar_t filePath[_MAX_PATH] = { 0 };
-			wcscpy_s(filePath, _MAX_PATH, folderPath);
-			wcscat(filePath, file_info.name);
-			if (file_info.attrib & _A_SUBDIR)
-			{
-				if ((wcscmp(file_info.name, L".") != 0) && (wcscmp(file_info.name, L"..") != 0))
-				{
-					wcscat(filePath, L"\\");
-					TraveseFiles(filePath, files);
-				}
-			}
-			else
-			{
-				files.push_back(filePath);
-			}
-		} while (_wfindnext(handle, &file_info) == 0);
-		_findclose(handle);
-	}
-	
-	return;
-}
-*/
-
 namespace SevenZip
 {
 	extern "C" bool Initialize()
