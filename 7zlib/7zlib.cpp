@@ -1,13 +1,13 @@
-// Client7z.cpp
 
 #include "StdAfx.h"
-#include "SevenZipWorker.h"
+#include "7zlib.h"
 
 #include <stdlib.h>  
 #include <direct.h> 
 #include <windows.h> 
 #include <string.h>
 #include <string>
+#include <vector>
 #include <io.h>
 #include <time.h>
 #include <stdio.h >  
@@ -35,11 +35,6 @@
 
 #include "IPassword.h"
 #include "C/7zVersion.h"
-
-#include "SevenZipWorker.h"
-
-// 把注释去掉可编译成 exe，否则可编译成 lib，配置属性做相应修改
-//#define USE_MAIN
 
 #ifdef _WIN32
 HINSTANCE g_hInstance = 0;
@@ -117,6 +112,27 @@ static void PrintError(const AString &s)
 	PrintNewLine();
 	PrintString(s);
 	PrintNewLine();
+}
+
+static void TraveseFiles(const FString& path, FStringVector& files)
+{
+	NFind::CFindFile ff;
+	NFind::CFileInfo fi;
+	FString wildcard = path + L"*";
+	if (ff.FindFirst(wildcard, fi))
+	{
+		do 
+		{
+			if (fi.IsArchived())
+			{
+				files.Add(path + fi.Name);
+			}
+			else if (fi.IsDir() && !fi.IsDots())
+			{
+				TraveseFiles(path + fi.Name + L"\\", files);
+			}
+		} while (ff.FindNext(fi));
+	}
 }
 
 static HRESULT IsArchiveItemProp(IInArchive *archive, UInt32 index, PROPID propID, bool &result)
@@ -251,9 +267,10 @@ public:
 	bool PasswordIsDefined;
 	UString Password;
 	UInt64 TotalSize;
-	Func_Percent PercentFunc;
+	SevenZip::CallbackFunc Callback;
+	void* UserData;
 
-	CArchiveExtractCallback() : PasswordIsDefined(false), TotalSize(0), PercentFunc(nullptr) {}
+	CArchiveExtractCallback() : PasswordIsDefined(false), TotalSize(0), Callback(nullptr), UserData(nullptr) {}
 };
 
 void CArchiveExtractCallback::Init(IInArchive *archiveHandler, const FString &directoryPath)
@@ -274,11 +291,11 @@ STDMETHODIMP CArchiveExtractCallback::SetTotal(UInt64 size)
 STDMETHODIMP CArchiveExtractCallback::SetCompleted(const UInt64 * completeValue)
 {
 	float percent = (*completeValue) * 100.0 / TotalSize;
-	std::cout << "Extract completed["<< percent << "%]" << std::endl;
+	//std::cout << "Extract completed["<< percent << "%]" << std::endl;
 
-	if (PercentFunc)
+	if (Callback)
 	{
-		PercentFunc(percent);
+		Callback(percent, UserData);
 	}
 	return S_OK;
 }
@@ -551,12 +568,13 @@ public:
 	bool m_NeedBeClosed;
 
 	UInt64 TotalSize;
-	Func_Percent PercentFunc;
+	SevenZip::CallbackFunc Callback;
+	void* UserData;
 
 	FStringVector FailedFiles;
 	CRecordVector<HRESULT> FailedCodes;
 
-	CArchiveUpdateCallback() : PasswordIsDefined(false), AskPassword(false), DirItems(0), TotalSize(0), PercentFunc(nullptr) {};
+	CArchiveUpdateCallback() : PasswordIsDefined(false), AskPassword(false), DirItems(0), TotalSize(0), Callback(nullptr), UserData(nullptr) {};
 
 	~CArchiveUpdateCallback() { Finilize(); }
 	HRESULT Finilize();
@@ -580,11 +598,11 @@ STDMETHODIMP CArchiveUpdateCallback::SetTotal(UInt64 size)
 STDMETHODIMP CArchiveUpdateCallback::SetCompleted(const UInt64 *completeValue)
 {
 	float percent = (*completeValue) * 100.0 / TotalSize;
-	std::cout << "Compress completed[" << percent << "%]" << std::endl;
+	//std::cout << "Compress completed[" << percent << "%]" << std::endl;
 
-	if (PercentFunc)
+	if (Callback)
 	{
-		PercentFunc(percent);
+		Callback(percent, UserData);
 	}
 	return S_OK;
 }
@@ -736,293 +754,289 @@ NDLL::CLibrary lib;
 
 Func_CreateObject createObjectFunc = nullptr;
 
-bool Load7zDll(const std::wstring &dll_path)
+/*
+void TraveseFiles(const wchar_t* folderPath, std::vector<std::wstring>& files)
 {
+	_wfinddata_t file_info;
+	wchar_t path[_MAX_PATH] = { 0 };
+	wcscpy_s(path, _MAX_PATH, folderPath);
+	wcscat(path, L"*");
 
-	FString real_path = NDLL::GetModuleDirPrefix() + FTEXT(kDllName);
-
-	if (dll_path != L"")
-	{
-		real_path = FString(dll_path.c_str());
-	}
-
-	//if (!lib.Load(NDLL::GetModuleDirPrefix() + FTEXT(kDllName)))
-	if (!lib.Load(real_path))
-	{
-		PrintError("Can not load 7-zip library");
-		return false;
-	}
-
-	return true;
-}
-
-bool Get7zDllFunction()
-{
-	if (createObjectFunc)
-	{
-		return true;
-	}
-	createObjectFunc = (Func_CreateObject)lib.GetProc("CreateObject");
-	if (!createObjectFunc)
-	{
-		PrintError("Can not get CreateObject");
-		return false;
-	}
-	return true;
-}
-
-bool Initialize7zDll(const std::wstring &dll_path)
-{
-	if (Load7zDll(dll_path) == false || Get7zDllFunction() == false)
-	{
-		return false;
-	}
-	return true;
-}
-
-SevenZipWorker::SevenZipWorker()
-	: m_folders(0)
-	, m_files(0)
-	, m_percent_func(nullptr)
-{
-
-}
-
-void SevenZipWorker::Initialize()
-{
-	m_folders = 0;
-	m_files = 0;
-	m_pack_list.clear();
-}
-
-void SevenZipWorker::RegisterPercentCallBackFunc(Func_Percent percent_func)
-{
-	m_percent_func = percent_func;
-}
-
-bool SevenZipWorker::TraveseFolder(const std::string &folder_path)
-{
-	_finddata_t file_info;
-	char path[_MAX_PATH] = {0};
-	strncpy(path, folder_path.c_str(), _MAX_PATH);
-	strcat(path, "\\*");
-
-	long handle = _findfirst(path, &file_info);
+	long handle = _wfindfirst(path, &file_info);
 	if (handle != -1L)
 	{
 		do
 		{
-			char file_path[_MAX_PATH] = { 0 };
-			strncpy(file_path, folder_path.c_str(), _MAX_PATH);
-			strcat(file_path, "\\");
-			strcat(file_path, file_info.name);
-			//std::cout << file_path << std::endl;
-			if (file_info.attrib & _A_SUBDIR) // 如果是目录
+			wchar_t filePath[_MAX_PATH] = { 0 };
+			wcscpy_s(filePath, _MAX_PATH, folderPath);
+			wcscat(filePath, file_info.name);
+			if (file_info.attrib & _A_SUBDIR)
 			{
-				if ((strcmp(file_info.name, ".") != 0) && (strcmp(file_info.name, "..") != 0))
+				if ((wcscmp(file_info.name, L".") != 0) && (wcscmp(file_info.name, L"..") != 0))
 				{
-					TraveseFolder(file_path);
-					m_folders += 1;
+					wcscat(filePath, L"\\");
+					TraveseFiles(filePath, files);
 				}
 			}
 			else
 			{
-				m_pack_list.push_back(std::string(file_path));
-				m_files += 1;
+				files.push_back(filePath);
 			}
-		} while (_findnext(handle, &file_info) == 0);
+		} while (_wfindnext(handle, &file_info) == 0);
 		_findclose(handle);
 	}
-	else
-	{
-		return false;
-	}
-	return true;
-}
-
-void SevenZipWorker::ShowFiles()
-{
-	for (auto item = m_pack_list.begin(); item != m_pack_list.end(); item++)
-	{
-		std::cout << *item << std::endl;
-	}
-	std::cout << "folders[" << m_folders << "]" << std::endl;
-	std::cout << "files[" << m_files << "]" << std::endl;
-}
-
-bool SevenZipWorker::JudgeFileExist(const std::string &file_path)
-{
-	DWORD file_type = GetFileAttributesA(file_path.c_str());
-	if (file_type == INVALID_FILE_ATTRIBUTES)
-	{
-		DWORD error_type = GetLastError();
-		std::cout << "judge file exist error type[" << error_type << "]" << std::endl;
-		return false;  //something is wrong with your path!
-	}
-	return true;
-}
-
-SevenZipStatus::BackStatus SevenZipWorker::Compress(const std::string &source_path, const std::string &goal_path)
-{
-
-	using namespace SevenZipStatus;
-#if 0
-	// TraveseFolder 会判，所以不需要了
-	if (JudgeFileExist(source_path) == false)
-	{
-		//PrintError("get source path error");
-		return COMPRESS_BAD_SOURCE_PATH;
-	}
-#endif
-
-	Initialize();
-
-	if (!TraveseFolder(source_path))
-	{
-		return COMPRESS_BAD_SOURCE_PATH;
-	}
-
-	FString archiveName = CmdStringToFString(goal_path.c_str());
 	
-	CObjectVector<CDirItem> dirItems;
-	{
-		for (auto item = m_pack_list.begin(); item != m_pack_list.end(); item++)
-		{
-			CDirItem di;
-			std::string file_path = *item;
-			std::string sub_path = file_path.substr(source_path.length()+1);
-			FString save_name = CmdStringToFString(sub_path.c_str());
-			FString name = CmdStringToFString(file_path.c_str());
+	return;
+}
+*/
 
-			NFind::CFileInfo fi;
-			if (!fi.Find(name))
+namespace SevenZip
+{
+	extern "C" bool Initialize()
+	{
+		if (!lib.Load(NDLL::GetModuleDirPrefix() + FTEXT(kDllName)))
+		{
+			PrintError("Can not load 7-zip library");
+			return false;
+		}
+
+		if (createObjectFunc)
+		{
+			return true;
+		}
+
+		createObjectFunc = (Func_CreateObject)lib.GetProc("CreateObject");
+		if (!createObjectFunc)
+		{
+			PrintError("Can not get CreateObject");
+			return false;
+		}
+
+		return true;
+	}
+
+	extern "C" ResultCode Compress(const wchar_t* source, const wchar_t* dest, CallbackFunc callback, void* user)
+	{
+		if (source == NULL)
+		{
+			return COMPRESS_BAD_SOURCE;
+		}
+
+		if (dest == NULL)
+		{
+			return COMPRESS_BAD_DEST;
+		}
+
+		FStringVector files;
+		
+		FString sourceFullPath;
+		NName::GetFullPath(source, sourceFullPath);
+		FString subSource(sourceFullPath); // 路径前缀
+		FString fixSource(sourceFullPath); // 后面不带 '/' 或 '\\'
+		FString folderName;
+		bool hasFolder = true;
+
+		if (fixSource.Back() == L'/' || fixSource.Back() == L'\\')
+		{
+			hasFolder = false;
+			fixSource.DeleteBack();
+		}
+
+		if (NFind::DoesFileExist(sourceFullPath)) // 是文件
+		{
+			hasFolder = false;
+			FString resDirPrefix;
+			FString resFileName;
+			files.Add(sourceFullPath);
+
+			bool result = NDir::GetFullPathAndSplit(source, resDirPrefix, resFileName);
+			if (result)
 			{
-				//PrintError("Can't find file", name);
-				return COMPRESS_FIND_FILE_ERROR;
+				subSource = resDirPrefix;
+			}
+			else
+			{
+				return COMPRESS_BAD_SOURCE;
+			}
+		}
+		else if (NFind::DoesDirExist(fixSource)) // 是文件夹
+		{
+			FString resDirPrefix;
+			FString resFileName;
+			bool result = NDir::GetFullPathAndSplit(fixSource, resDirPrefix, resFileName);
+			if (result)
+			{
+				folderName = resFileName;
+			}
+			else
+			{
+				return COMPRESS_BAD_SOURCE;
 			}
 
-			di.Attrib = fi.Attrib;
-			di.Size = fi.Size;
-			di.CTime = fi.CTime;
-			di.ATime = fi.ATime;
-			di.MTime = fi.MTime;
-			di.Name = fs2us(save_name);
-			di.FullPath = name;
-			dirItems.Add(di);
+			NName::NormalizeDirPathPrefix(subSource);
+			TraveseFiles(subSource, files);
 		}
-	}
-
-	COutFileStream *outFileStreamSpec = new COutFileStream;
-	CMyComPtr<IOutStream> outFileStream = outFileStreamSpec;
-	if (!outFileStreamSpec->Create(archiveName, false))
-	{
-		//PrintError("can't create archive file");
-		return COMPRESS_CREATE_ARCHIVE_FILE_ERROR;
-	}
-
-	CMyComPtr<IOutArchive> outArchive;
-	if (createObjectFunc(&CLSID_Format, &IID_IOutArchive, (void **)&outArchive) != S_OK)
-	{
-		//PrintError("Can not get class object");
-		return COMPRESS_GET_CLASS_OBJECT_ERROR;
-	}
-
-	CArchiveUpdateCallback *updateCallbackSpec = new CArchiveUpdateCallback;
-
-	updateCallbackSpec->PercentFunc = m_percent_func;
-
-	CMyComPtr<IArchiveUpdateCallback2> updateCallback(updateCallbackSpec);
-	updateCallbackSpec->Init(&dirItems);
-
-	HRESULT result = outArchive->UpdateItems(outFileStream, dirItems.Size(), updateCallback);
-
-	updateCallbackSpec->Finilize();
-
-	if (result != S_OK)
-	{
-		//PrintError("Update Error");
-		return COMPRESS_UPDATE_ERROR;
-	}
-
-	FOR_VECTOR(i, updateCallbackSpec->FailedFiles)
-	{
-		PrintNewLine();
-		PrintError("Error for file", updateCallbackSpec->FailedFiles[i]);
-	}
-
-	if (updateCallbackSpec->FailedFiles.Size() != 0)
-	{
-		return COMPRESS_GET_FAILED_FILES;
-	}
-	return COMPRESS_OK;
-}
-
-SevenZipStatus::BackStatus SevenZipWorker::Extract(const std::string &source_path, const std::string &goal_path)
-{
-
-	using namespace SevenZipStatus;
-
-	CreateDirectoryA(goal_path.c_str(), NULL);
-
-	CMyComPtr<IInArchive> archive;
-	if (createObjectFunc(&CLSID_Format, &IID_IInArchive, (void **)&archive) != S_OK)
-	{
-		//PrintError("Can not get class object");
-		return EXTRACT_GET_CLASS_OBJECT_ERROR;
-	}
-
-	CInFileStream *fileSpec = new CInFileStream;
-	CMyComPtr<IInStream> file = fileSpec;
-
-	FString archiveName = CmdStringToFString(source_path.c_str());
-
-	if (!fileSpec->Open(archiveName))
-	{
-		//PrintError("Can not open archive file", archiveName);
-		return EXTRACT_OPEN_ARCHIVE_FILE_ERROR;
-	}
-
-	{
-		CArchiveOpenCallback *openCallbackSpec = new CArchiveOpenCallback;
-
-		CMyComPtr<IArchiveOpenCallback> openCallback(openCallbackSpec);
-		openCallbackSpec->PasswordIsDefined = false;
-		// openCallbackSpec->PasswordIsDefined = true;
-		// openCallbackSpec->Password = L"1";
-
-		const UInt64 scanSize = 1 << 23;
-		if (archive->Open(file, &scanSize, openCallback) != S_OK)
+		else
 		{
-			//PrintError("Can not open file as archive", archiveName);
-			return EXTRACT_OPEN_FILE_AS_ARCHIVE_ERROR;
+			return COMPRESS_BAD_SOURCE;
 		}
-	}
 
-	{
-		// Extract command
-		CArchiveExtractCallback *extractCallbackSpec = new CArchiveExtractCallback;
+		FString archiveName(dest);
+		COutFileStream *outFileStreamSpec = new COutFileStream;
+		CMyComPtr<IOutStream> outFileStream = outFileStreamSpec;
+		if (!outFileStreamSpec->Create(archiveName, false))
+		{
+			//PrintError("can't create archive file");
+			return COMPRESS_CREATE_ARCHIVE_FILE_ERROR;
+		}
 
-		extractCallbackSpec->PercentFunc = m_percent_func;
+		CObjectVector<CDirItem> dirItems;
+		{
+			FOR_VECTOR(i, files)
+			{
+				CDirItem di;
+				FString name = files[i];
+				FString saveName = name.Mid(subSource.Len(), name.Len() - subSource.Len());
+				if (hasFolder)
+				{
+					saveName = folderName + L"\\" + saveName;
+				}
 
-		CMyComPtr<IArchiveExtractCallback> extractCallback(extractCallbackSpec);
+				NFind::CFileInfo fi;
+				if (!fi.Find(name))
+				{
+					//PrintError("Can't find file", name);
+					return COMPRESS_FIND_FILE_ERROR;
+				}
 
-		FString out_folder_path = CmdStringToFString(goal_path.c_str());
+				di.Attrib = fi.Attrib;
+				di.Size = fi.Size;
+				di.CTime = fi.CTime;
+				di.ATime = fi.ATime;
+				di.MTime = fi.MTime;
+				di.Name = fs2us(saveName);
+				di.FullPath = name;
+				dirItems.Add(di);
+			}
+		}
 
-		extractCallbackSpec->Init(archive, out_folder_path); // second parameter is output folder path
-		extractCallbackSpec->PasswordIsDefined = false;
+		CMyComPtr<IOutArchive> outArchive;
+		if (createObjectFunc(&CLSID_Format, &IID_IOutArchive, (void **)&outArchive) != S_OK)
+		{
+			//PrintError("Can not get class object");
+			return COMPRESS_GET_CLASS_OBJECT_ERROR;
+		}
 
-		HRESULT result = archive->Extract(NULL, (UInt32)(Int32)(-1), false, extractCallback);
+		CArchiveUpdateCallback *updateCallbackSpec = new CArchiveUpdateCallback;
+
+		updateCallbackSpec->Callback = callback;
+		updateCallbackSpec->UserData = user;
+
+		CMyComPtr<IArchiveUpdateCallback2> updateCallback(updateCallbackSpec);
+		updateCallbackSpec->Init(&dirItems);
+
+		HRESULT result = outArchive->UpdateItems(outFileStream, dirItems.Size(), updateCallback);
+
+		updateCallbackSpec->Finilize();
 
 		if (result != S_OK)
 		{
-			//PrintError("Extract Error");
-			return EXTRACT_FILES_ERROR;
+			//PrintError("Update Error");
+			return COMPRESS_UPDATE_ERROR;
 		}
+
+		FOR_VECTOR(i, updateCallbackSpec->FailedFiles)
+		{
+			PrintNewLine();
+			PrintError("Error for file", updateCallbackSpec->FailedFiles[i]);
+		}
+
+		if (updateCallbackSpec->FailedFiles.Size() != 0)
+		{
+			return COMPRESS_GET_FAILED_FILES;
+		}
+		return COMPRESS_OK;
 	}
-	return EXTRACT_OK;
-}
+
+	extern "C" ResultCode Uncompress(const wchar_t* source, const wchar_t* dest, CallbackFunc callback, void* user)
+	{
+		if (source == NULL)
+		{
+			return EXTRACT_BAD_SOURCE;
+		}
+
+		if (dest == NULL)
+		{
+			return EXTRACT_BAD_DEST;
+		}
+
+		CMyComPtr<IInArchive> archive;
+		if (createObjectFunc(&CLSID_Format, &IID_IInArchive, (void **)&archive) != S_OK)
+		{
+			//PrintError("Can not get class object");
+			return EXTRACT_GET_CLASS_OBJECT_ERROR;
+		}
+
+		CInFileStream *fileSpec = new CInFileStream;
+		CMyComPtr<IInStream> file = fileSpec;
+
+		FString archiveName(source);
+
+		if (!fileSpec->Open(archiveName))
+		{
+			//PrintError("Can not open archive file", archiveName);
+			return EXTRACT_OPEN_ARCHIVE_FILE_ERROR;
+		}
+
+		{
+			CArchiveOpenCallback *openCallbackSpec = new CArchiveOpenCallback;
+
+			CMyComPtr<IArchiveOpenCallback> openCallback(openCallbackSpec);
+			openCallbackSpec->PasswordIsDefined = false;
+			// openCallbackSpec->PasswordIsDefined = true;
+			// openCallbackSpec->Password = L"1";
+
+			const UInt64 scanSize = 1 << 23;
+			if (archive->Open(file, &scanSize, openCallback) != S_OK)
+			{
+				//PrintError("Can not open file as archive", archiveName);
+				return EXTRACT_OPEN_FILE_AS_ARCHIVE_ERROR;
+			}
+		}
+
+		{
+			// Extract command
+			CArchiveExtractCallback *extractCallbackSpec = new CArchiveExtractCallback;
+
+			extractCallbackSpec->Callback = callback;
+			extractCallbackSpec->UserData = user;
+
+			CMyComPtr<IArchiveExtractCallback> extractCallback(extractCallbackSpec);
+
+			FString outFolderPath(dest);
+
+			extractCallbackSpec->Init(archive, outFolderPath); // second parameter is output folder path
+			extractCallbackSpec->PasswordIsDefined = false;
+
+			HRESULT result = archive->Extract(NULL, (UInt32)(Int32)(-1), false, extractCallback);
+
+			if (result != S_OK)
+			{
+				//PrintError("Extract Error");
+				return EXTRACT_FILES_ERROR;
+			}
+		}
+		return EXTRACT_OK;
+	}
+
+	extern "C" void Uninitialize()
+	{
+
+	}
+} // namespace SevenZip
 
 
+/*
 SevenZipStatus::BackStatus SevenZipWorker::ListArchive(const std::string &source_path)
 {
 	using namespace SevenZipStatus;
@@ -1086,75 +1100,9 @@ SevenZipStatus::BackStatus SevenZipWorker::ListArchive(const std::string &source
 	return LIST_OK;
 }
 
+*/
+
 
 // Main function
 
 #define NT_CHECK_FAIL_ACTION PrintError("Unsupported Windows version"); return 1;
-
-#ifdef USE_MAIN
-
-int MY_CDECL main(int numArgs, const char *args[])
-{
-	NT_CHECK
-
-	using namespace SevenZipStatus;
-
-	PrintStringLn(kCopyrightString);
-
-	if (numArgs < 3)
-	{
-		PrintStringLn(kHelpString);
-		return 1;
-	}
-
-	if (Initialize7zDll(L"G:\\repo\\7zlib\\Debug\\7z.dll") == false)
-	{
-		return 1;
-	}
-
-	char c;
-	{
-		AString command = args[1];
-		if (command.Len() != 1)
-		{
-			PrintError("incorrect command");
-			return 1;
-		}
-		c = (char)MyCharLower_Ascii(command[0]);
-	}
-
-	FString archiveName = CmdStringToFString(args[2]);
-
-	if (c == 'a')
-	{
-		SevenZipWorker sw;
-		SevenZipStatus::BackStatus result = sw.Compress(std::string(args[2]), std::string(args[3]));
-		std::cout << SevenZipStatus::BackMsg(result);
-	}
-	else if (c == 'x')
-	{
-		SevenZipWorker sw;
-		SevenZipStatus::BackStatus result = sw.Extract(std::string(args[2]), std::string(args[3]));
-		std::cout << SevenZipStatus::BackMsg(result);
-	}
-	else if (c == 'l')
-	{
-		if (numArgs != 3)
-		{
-			PrintStringLn(kHelpString);
-			return 1;
-		}
-		SevenZipWorker sw;
-		SevenZipStatus::BackStatus result = sw.ListArchive(std::string(args[2]));
-		std::cout << SevenZipStatus::BackMsg(result);
-	}
-	else
-	{
-		PrintStringLn(kHelpString);
-		return 1;
-	}
-
-	return 0;
-}
-
-#endif

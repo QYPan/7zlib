@@ -114,10 +114,10 @@
     <ClInclude Include="PropID.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SevenZipWorker.h">
+    <ClInclude Include="StdAfx.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="StdAfx.h">
+    <ClInclude Include="7zlib.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -167,10 +167,10 @@
     <ClCompile Include="Windows\PropVariantConv.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="main.cpp">
+    <ClCompile Include="StdAfx.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="StdAfx.cpp">
+    <ClCompile Include="7zlib.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

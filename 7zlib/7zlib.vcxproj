@@ -18,15 +18,15 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v120</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v120</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -42,7 +42,7 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <TargetExt>.exe</TargetExt>
+    <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -54,7 +54,7 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_LIB;SEVEN_ZIP_EXPORTS;SEVEN_ZIP_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
     </ClCompile>
     <Link>
@@ -70,9 +70,9 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_LIB;SEVEN_ZIP_EXPORTS;SEVEN_ZIP_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -82,6 +82,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="7zlib.h" />
     <ClInclude Include="Archive\IArchive.h" />
     <ClInclude Include="Common\Common.h" />
     <ClInclude Include="Common\Defs.h" />
@@ -106,7 +107,6 @@
     <ClInclude Include="IProgress.h" />
     <ClInclude Include="IStream.h" />
     <ClInclude Include="PropID.h" />
-    <ClInclude Include="SevenZipWorker.h" />
     <ClInclude Include="StdAfx.h" />
     <ClInclude Include="Windows\Defs.h" />
     <ClInclude Include="Windows\DLL.h" />
@@ -119,6 +119,7 @@
     <ClInclude Include="Windows\PropVariantConv.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="7zlib.cpp" />
     <ClCompile Include="Common\FileStreams.cpp" />
     <ClCompile Include="Common\IntToString.cpp" />
     <ClCompile Include="Common\MyString.cpp" />
@@ -127,7 +128,6 @@
     <ClCompile Include="Common\NewHandler.cpp" />
     <ClCompile Include="Common\StringConvert.cpp" />
     <ClCompile Include="Common\Wildcard.cpp" />
-    <ClCompile Include="main.cpp" />
     <ClCompile Include="StdAfx.cpp" />
     <ClCompile Include="Windows\DLL.cpp" />
     <ClCompile Include="Windows\FileDir.cpp" />
