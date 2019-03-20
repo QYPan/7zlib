@@ -18,46 +18,53 @@
 ### 接口
 
 ```cpp
-namespace SevenZip
+enum ResultCode
 {
+	COMPRESS_BAD_SOURCE, // Compress Error: bad source.
+	COMPRESS_BAD_DEST, // Compress Error: bad dest.
+	COMPRESS_FIND_FILE_ERROR, // Compress Error: find file error.
+	COMPRESS_CREATE_ARCHIVE_FILE_ERROR, // Compress Error: create archive file error.
+	COMPRESS_GET_CLASS_OBJECT_ERROR, // Compress Error: get class object error.
+	COMPRESS_UPDATE_ERROR, // Compress Error: update error.
+	COMPRESS_GET_FAILED_FILES, // Compress Error: get failed files.
+	COMPRESS_OK, // Compress Successed: ok.
 
-	enum ResultCode
-	{
-		COMPRESS_BAD_SOURCE, // Compress Error: bad source.
-		COMPRESS_BAD_DEST, // Compress Error: bad dest.
-		COMPRESS_FIND_FILE_ERROR, // Compress Error: find file error.
-		COMPRESS_CREATE_ARCHIVE_FILE_ERROR, // Compress Error: create archive file error.
-		COMPRESS_GET_CLASS_OBJECT_ERROR, // Compress Error: get class object error.
-		COMPRESS_UPDATE_ERROR, // Compress Error: update error.
-		COMPRESS_GET_FAILED_FILES, // Compress Error: get failed files.
-		COMPRESS_OK, // Compress Successed: ok.
+	EXTRACT_BAD_SOURCE, // Extract Error: bad source.
+	EXTRACT_BAD_DEST, // Extract Error: bad dest.
+	EXTRACT_GET_CLASS_OBJECT_ERROR, // Extract Error: get class object error.
+	EXTRACT_OPEN_ARCHIVE_FILE_ERROR, // Extract Error: open archive file error.
+	EXTRACT_OPEN_FILE_AS_ARCHIVE_ERROR, // Extract Error: open file as archive error.
+	EXTRACT_FILES_ERROR, // Extract Error: files error.
+	EXTRACT_OK, // Extract Successed: ok.
 
-		EXTRACT_BAD_SOURCE, // Extract Error: bad source.
-		EXTRACT_BAD_DEST, // Extract Error: bad dest.
-		EXTRACT_GET_CLASS_OBJECT_ERROR, // Extract Error: get class object error.
-		EXTRACT_OPEN_ARCHIVE_FILE_ERROR, // Extract Error: open archive file error.
-		EXTRACT_OPEN_FILE_AS_ARCHIVE_ERROR, // Extract Error: open file as archive error.
-		EXTRACT_FILES_ERROR, // Extract Error: files error.
-		EXTRACT_OK, // Extract Successed: ok.
+	LIST_GET_CLASS_OBJECT_ERROR, // List Error: get class object error.
+	LIST_OPEN_ARCHIVE_FILE_ERROR, // List Error: open archive file error.
+	LIST_OPEN_FILE_AS_ARCHIVE_ERROR, // List Error: open file as archive error.
+	LIST_OK, // List Successed: ok.
 
-		LIST_GET_CLASS_OBJECT_ERROR, // List Error: get class object error.
-		LIST_OPEN_ARCHIVE_FILE_ERROR, // List Error: open archive file error.
-		LIST_OPEN_FILE_AS_ARCHIVE_ERROR, // List Error: open file as archive error.
-		LIST_OK, // List Successed: ok.
+	UNKNOW_ERROR // Error: Unknow result.
+};
 
-		UNKNOW_ERROR // Error: Unknow result.
-	};
+// float - 如：56.7998%
+typedef void(*CallbackFunc)(float, void*);
 
-	typedef void(*CallbackFunc)(float, void*);
+// 初始化(请勿多次初始化)
+bool Initialize();
 
-	extern "C" SEVEN_ZIP_API bool Initialize();
+// source - 可以是相对路径或绝对路径，可以是文件 file 或目录 dir(目录的话如果以斜杠结尾则压缩包里没有顶层目录 dir，否则有)
+// dest - 压缩包生成路径(要带文件名)，注意：请确保目录存在
+// callback - 进度回调
+// user - 用户数据，接口不会做任何修改，会在进度回调时传回 callback 的第二个参数
+ResultCode Compress(const wchar_t* source, const wchar_t* dest, CallbackFunc callback = 0, void* user = 0);
 
-	extern "C" SEVEN_ZIP_API ResultCode Compress(const wchar_t* source, const wchar_t* dest, CallbackFunc callback = 0, void* user = 0);
+// source - 压缩包生成路径(要带文件名)，注意：请确保目录存在
+// dest - 解压所在目录，不在乎是否以斜杠结尾，注意：请确保目录存在
+// callback - 同上
+// user - 同上
+ResultCode Uncompress(const wchar_t* source, const wchar_t* dest, CallbackFunc callback = 0, void* user = 0);
 
-	extern "C" SEVEN_ZIP_API ResultCode Uncompress(const wchar_t* source, const wchar_t* dest, CallbackFunc callback = 0, void* user = 0);
-
-	extern "C" SEVEN_ZIP_API void Uninitialize();
-} // namespace SevenZip
+// 卸载
+void Uninitialize();
 ```
 
 ### 例子
@@ -87,10 +94,6 @@ void TestCallback(float percent, void* user)
 	TestInfo* ti = static_cast<TestInfo*>(user);
 	std::cout << "threadId: " << ti->id << " " << ti->content << " " << percent << "%" << std::endl;
 }
-
-// source - 可以是相对路径或绝对路径，可以是文件 file 或目录 dir(目录的话如果以斜杠结尾则压缩包里没有顶层目录 dir，否则有)
-// dest - 压缩包生成路径(要带文件名)，注意：请确保目录存在
-// out - 解压所在目录，不在乎是否以斜杠结尾，注意：请确保目录存在
 
 void TestLib(const wchar_t* source, const wchar_t* dest, const wchar_t* out)
 {
