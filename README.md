@@ -51,7 +51,7 @@ typedef void(*CallbackFunc)(float, void*);
 // 初始化(请勿多次初始化)
 bool Initialize();
 
-// source - 可以是相对路径或绝对路径，可以是文件 file 或目录 dir(目录的话如果以斜杠结尾则压缩包里没有顶层目录 dir，否则有)
+// source - 可以是相对路径或绝对路径，可以是文件路径 file 或目录路径 dir(目录的话如果以斜杠结尾则压缩包里没有顶层目录 dir，否则有)
 // dest - 压缩包生成路径(要带文件名)，注意：请确保目录存在
 // callback - 进度回调
 // user - 用户数据，接口不会做任何修改，会在进度回调时传回 callback 的第二个参数
